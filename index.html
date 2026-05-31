@@ -698,13 +698,13 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.05.31-r6";
+    const APP_VERSION = "2026.05.31-r7";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
     const STORE = {
       worker: "j111.workerCache",
-      lang: "j111.lang",
+      lang: "j111.lang.r7",
       demoLogs: "j111.demoLogs",
       demoConfig: "j111.demoConfig"
     };
@@ -1024,9 +1024,7 @@
       logs: loadDemoLogs(),
       daily: [],
       mapsReady: false,
-      signMap: null,
       adminMap: null,
-      signLayer: null,
       adminLayer: null,
       selectedMapPoint: null,
       charts: {},
@@ -1044,9 +1042,10 @@
       const saved = localStorage.getItem(STORE.lang) || "auto";
       $("languageSelect").value = saved;
       if (saved !== "auto") return saved;
-      const browser = (navigator.language || "en").toLowerCase();
-      if (browser.startsWith("zh")) return "zh";
-      if (browser.startsWith("bn")) return "bn";
+      const languages = [...(navigator.languages || []), navigator.language || ""].map((lang) => lang.toLowerCase());
+      if (languages.some((lang) => lang.startsWith("zh"))) return "zh";
+      if (languages.some((lang) => lang.startsWith("bn"))) return "bn";
+      if (languages.some((lang) => lang.startsWith("en"))) return "en";
       return "en";
     }
 
@@ -1264,10 +1263,8 @@
     }
 
     function setKpis(prefix, kpi) {
-      const map = prefix ? {
+      const map = {
         checkedIn: "adminCheckedIn", onSite: "adminOnSite", checkedOut: "adminCheckedOut", abnormal: "adminAbnormal", hours: "adminHours"
-      } : {
-        checkedIn: "kpiCheckedIn", onSite: "kpiOnSite", checkedOut: "kpiCheckedOut", abnormal: "kpiAbnormal", hours: "kpiHours"
       };
       $(map.checkedIn).textContent = kpi.checkedIn;
       $(map.onSite).textContent = kpi.onSite;
@@ -1419,7 +1416,7 @@
           lat: position.lat,
           lng: position.lng,
           accuracy: position.accuracy,
-          siteId: site.id,
+          siteId: site.name,
           distanceMeters: Math.round(distance),
           inRange: distance <= (Number(site.radius) || 0),
           workDate: workDateFor(position.timestamp || new Date(), action)
@@ -1568,9 +1565,9 @@
       try {
         const type = $("configType").value;
         const item = {
-          id: $("configId").value || makeId(type.toUpperCase()),
-          name: $("configName").value.trim(),
-          status: "active"
+        name: $("configName").value.trim(),
+        originalName: $("configId").value || $("configName").value.trim(),
+        status: "active"
         };
         if (type === "site") {
           item.lat = Number($("configLat").value);
@@ -1579,9 +1576,9 @@
         }
         if (type === "trade") item.sort = activeItems("trades").length + 1;
         const plural = type === "site" ? "sites" : type === "area" ? "areas" : type === "supervisor" ? "supervisors" : "trades";
-        const existingIndex = state.config[plural].findIndex((entry) => entry.id === item.id);
+        const existingIndex = state.config[plural].findIndex((entry) => entry.name === item.originalName);
         if (existingIndex >= 0) item.status = state.config[plural][existingIndex].status || "active";
-        await apiCall(existingIndex >= 0 ? "updateConfig" : "saveConfig", { type, item });
+        await apiCall(existingIndex >= 0 ? "updateConfig" : "saveConfig", { type, item, originalName: item.originalName });
         await refreshAdminData();
         $("configForm").reset();
         $("configId").value = "";
@@ -1600,12 +1597,12 @@
         <div class="config-item">
           <div class="config-item-main">
             <strong>${escapeHtml(item.name)}</strong>
-            <span>${state.configFilter === "site" ? `${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)} · ${item.radius || 0}m` : escapeHtml(item.id || item.name)} · ${item.status === "inactive" ? t("disable") : t("enable")}</span>
+            <span>${state.configFilter === "site" ? `${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)} · ${item.radius || 0}m` : escapeHtml(item.name)} · ${item.status === "inactive" ? t("disable") : t("enable")}</span>
           </div>
           <div class="config-item-actions">
-            <button type="button" class="icon-btn" data-config-action="edit" data-config-id="${escapeHtml(item.id)}" title="${t("edit")}">✎</button>
-            <button type="button" class="icon-btn" data-config-action="toggle" data-config-id="${escapeHtml(item.id)}" title="${item.status === "inactive" ? t("enable") : t("disable")}">${item.status === "inactive" ? "✓" : "⊘"}</button>
-            <button type="button" class="icon-btn danger" data-config-action="delete" data-config-id="${escapeHtml(item.id)}" title="${t("delete")}">×</button>
+            <button type="button" class="icon-btn" data-config-action="edit" data-config-id="${escapeHtml(item.name)}" title="${t("edit")}">✎</button>
+            ${state.configFilter === "site" ? `<button type="button" class="icon-btn" data-config-action="toggle" data-config-id="${escapeHtml(item.name)}" title="${item.status === "inactive" ? t("enable") : t("disable")}">${item.status === "inactive" ? "✓" : "⊘"}</button>` : ""}
+            <button type="button" class="icon-btn danger" data-config-action="delete" data-config-id="${escapeHtml(item.name)}" title="${t("delete")}">×</button>
           </div>
         </div>
       `).join("");
@@ -1617,11 +1614,11 @@
     async function handleConfigAction(action, id) {
       const type = state.configFilter;
       const plural = type === "site" ? "sites" : type === "area" ? "areas" : type === "supervisor" ? "supervisors" : "trades";
-      const item = state.config[plural].find((entry) => entry.id === id);
+      const item = state.config[plural].find((entry) => entry.name === id);
       if (!item) return;
       if (action === "edit") {
         $("configType").value = type;
-        $("configId").value = item.id;
+        $("configId").value = item.name;
         $("configName").value = item.name || "";
         $("configLat").value = item.lat || "";
         $("configLng").value = item.lng || "";
@@ -1630,10 +1627,10 @@
         return;
       }
       if (action === "toggle") {
-        await apiCall("updateConfig", { type, item: { ...item, status: item.status === "inactive" ? "active" : "inactive" } });
+        await apiCall("updateConfig", { type, originalName: item.name, item: { ...item, originalName: item.name, status: item.status === "inactive" ? "active" : "inactive" } });
       }
       if (action === "delete") {
-        await apiCall("deleteConfig", { type, id: item.id });
+        await apiCall("deleteConfig", { type, name: item.name });
       }
       await refreshAdminData();
       showToast("configToast", t(action === "delete" ? "configDeleted" : "configUpdated"), "ok");
@@ -1840,7 +1837,6 @@
         ["workerName", "phone", "finLast4"].forEach((id) => $(id).value = "");
         showToast("signToast", t("cacheCleared"), "ok");
       });
-      $("refreshBtn").addEventListener("click", refreshData);
       $("applyFilterBtn").addEventListener("click", () => isAdminAuthed() ? refreshAdminData() : renderDashboard());
       $("filterDate").addEventListener("change", () => isAdminAuthed() ? refreshAdminData() : refreshData());
       $("configForm").addEventListener("submit", saveConfig);
@@ -1886,6 +1882,7 @@
       applyLanguage();
       renderGpsStatus();
       toggleSubmit(false);
+      refreshGps();
       refreshData().finally(refreshGps);
     }
 
