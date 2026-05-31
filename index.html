@@ -670,7 +670,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.05.31-r4";
+    const APP_VERSION = "2026.05.31-r5";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -1040,7 +1040,10 @@
 
     function optionHtml(items, labelKey = "selectOne", includeAll = false) {
       const first = includeAll ? `<option value="">${t("all")}</option>` : `<option value="">${t(labelKey)}</option>`;
-      return first + items.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+      return first + items.map((item) => {
+        const value = item.id || item.name;
+        return `<option value="${escapeHtml(value)}">${escapeHtml(item.name || value)}</option>`;
+      }).join("");
     }
 
     function renderOptions() {
@@ -1360,8 +1363,11 @@
           phone: $("phone").value.trim(),
           finLast4: $("finLast4").value.trim().toUpperCase(),
           tradeId: $("trade").value,
+          tradeName: selectedText("trade"),
           areaId: $("area").value,
+          areaName: selectedText("area"),
           supervisorId: $("supervisor").value,
+          supervisorName: selectedText("supervisor"),
           workContent: $("workContent").value.trim(),
           clientTimestamp: nowIso(),
           clientDate: singaporeDate(),
@@ -1631,7 +1637,12 @@
     }
 
     function nameById(type, id) {
-      return (state.config[type] || []).find((item) => item.id === id)?.name || id || "-";
+      return (state.config[type] || []).find((item) => item.id === id || item.name === id)?.name || id || "-";
+    }
+
+    function selectedText(id) {
+      const select = $(id);
+      return select.options[select.selectedIndex]?.text || "";
     }
 
     function latestValue(items, key) {
