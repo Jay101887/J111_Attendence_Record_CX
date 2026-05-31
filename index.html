@@ -423,8 +423,6 @@
         <span data-i18n="appSubtitle">Singapore site check-in, dashboard and sheet sync</span>
       </div>
       <div class="top-actions">
-        <input class="api-input" id="apiUrl" placeholder="Apps Script Web App URL" />
-        <button class="secondary" id="saveApiBtn" data-i18n="saveApi">Save API</button>
         <select class="lang-select" id="languageSelect" aria-label="Language">
           <option value="auto">Auto</option>
           <option value="zh">中文</option>
@@ -678,14 +676,13 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const ADMIN_PASSWORD = "admin888";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
+    const DEMO_ADMIN_PASSWORD = "demo";
     const STORE = {
-      api: "j111.apiUrl",
       worker: "j111.workerCache",
       lang: "j111.lang",
       demoLogs: "j111.demoLogs",
-      demoConfig: "j111.demoConfig",
-      adminAuth: "j111.adminAuth"
+      demoConfig: "j111.demoConfig"
     };
 
     const i18n = {
@@ -1401,7 +1398,18 @@
     }
 
     async function refreshData() {
-      const result = await apiCall("init", { date: $("filterDate").value || singaporeDate() }).catch(() => null);
+      const result = await apiCall("initPublic", { date: $("filterDate").value || singaporeDate() }).catch(() => null);
+      if (result?.config) state.config = normalizeConfig(result.config);
+      renderOptions();
+      renderDashboard();
+    }
+
+    async function refreshAdminData() {
+      const password = sessionStorage.getItem("j111.adminPassword") || "";
+      const result = await apiCall("adminDashboard", {
+        date: $("filterDate").value || singaporeDate(),
+        adminPassword: password
+      });
       if (result?.config) state.config = normalizeConfig(result.config);
       if (result?.logs) state.logs = result.logs;
       renderOptions();
@@ -1467,16 +1475,20 @@
     }
 
     function apiCall(action, payload) {
-      const apiUrl = localStorage.getItem(STORE.api);
-      if (!apiUrl) {
-      if (action === "init") return Promise.resolve({ config: state.config, logs: state.logs });
-      if (action === "submitLog") return Promise.resolve({ ok: true, log: { ...payload, id: makeId("LOG"), serverTimestamp: payload.clientTimestamp } });
-      if (action === "saveConfig") return Promise.resolve({ ok: true });
+      const isDemo = !APPS_SCRIPT_URL || APPS_SCRIPT_URL === "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+      if (isDemo) {
+        if (action === "initPublic") return Promise.resolve({ config: state.config });
+        if (action === "adminDashboard") {
+          if (payload.adminPassword !== DEMO_ADMIN_PASSWORD) return Promise.reject(new Error("Unauthorized"));
+          return Promise.resolve({ config: state.config, logs: state.logs });
+        }
+        if (action === "submitLog") return Promise.resolve({ ok: true, log: { ...payload, id: makeId("LOG"), serverTimestamp: payload.clientTimestamp } });
+        if (action === "saveConfig") return Promise.resolve({ ok: true });
       }
       if (action === "saveConfig") {
         payload = { ...(payload || {}), adminPassword: sessionStorage.getItem("j111.adminPassword") || "" };
       }
-      return jsonp(apiUrl, { action, payload: JSON.stringify(payload || {}) });
+      return jsonp(APPS_SCRIPT_URL, { action, payload: JSON.stringify(payload || {}) });
     }
 
     function jsonp(url, params) {
@@ -1593,11 +1605,7 @@
     }
 
     function isAdminAuthed() {
-      const authed = localStorage.getItem(STORE.adminAuth) === "true";
-      if (authed && !sessionStorage.getItem("j111.adminPassword")) {
-        sessionStorage.setItem("j111.adminPassword", ADMIN_PASSWORD);
-      }
-      return authed;
+      return Boolean(sessionStorage.getItem("j111.adminPassword"));
     }
 
     function openAdminLogin() {
@@ -1622,15 +1630,17 @@
       }, 60);
     }
 
-    function tryAdminLogin() {
-      if ($("adminPassword").value === ADMIN_PASSWORD) {
-        localStorage.setItem(STORE.adminAuth, "true");
-        sessionStorage.setItem("j111.adminPassword", ADMIN_PASSWORD);
+    async function tryAdminLogin() {
+      const password = $("adminPassword").value;
+      try {
+        await apiCall("adminDashboard", { date: $("filterDate").value || singaporeDate(), adminPassword: password });
+        sessionStorage.setItem("j111.adminPassword", password);
         closeAdminLogin();
         showView("adminView");
-        return;
+        await refreshAdminData();
+      } catch {
+        showToast("adminLoginToast", t("wrongPassword"), "bad");
       }
-      showToast("adminLoginToast", t("wrongPassword"), "bad");
     }
 
     function bindEvents() {
@@ -1647,11 +1657,6 @@
         localStorage.setItem(STORE.lang, $("languageSelect").value);
         applyLanguage();
       });
-      $("saveApiBtn").addEventListener("click", async () => {
-        localStorage.setItem(STORE.api, $("apiUrl").value.trim());
-        showToast("signToast", t("apiSaved"), "ok");
-        await refreshData();
-      });
       $("checkInBtn").addEventListener("click", () => submitAttendance("checkIn"));
       $("checkOutBtn").addEventListener("click", () => submitAttendance("checkOut"));
       $("clearCacheBtn").addEventListener("click", () => {
@@ -1660,8 +1665,8 @@
         showToast("signToast", t("cacheCleared"), "ok");
       });
       $("refreshBtn").addEventListener("click", refreshData);
-      $("applyFilterBtn").addEventListener("click", renderDashboard);
-      $("filterDate").addEventListener("change", refreshData);
+      $("applyFilterBtn").addEventListener("click", () => isAdminAuthed() ? refreshAdminData() : renderDashboard());
+      $("filterDate").addEventListener("change", () => isAdminAuthed() ? refreshAdminData() : refreshData());
       $("configForm").addEventListener("submit", saveConfig);
       $("configType").addEventListener("change", updateConfigForm);
       $("useMapPointBtn").addEventListener("click", () => {
@@ -1674,7 +1679,6 @@
       $("adminLoginBtn").addEventListener("click", tryAdminLogin);
       $("adminCancelBtn").addEventListener("click", closeAdminLogin);
       $("adminLogoutBtn").addEventListener("click", () => {
-        localStorage.removeItem(STORE.adminAuth);
         sessionStorage.removeItem("j111.adminPassword");
         showView("signView");
       });
@@ -1685,7 +1689,6 @@
     }
 
     function init() {
-      $("apiUrl").value = localStorage.getItem(STORE.api) || "";
       setupTime();
       bindEvents();
       updateConfigForm();
