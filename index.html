@@ -670,7 +670,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.05.31-r3";
+    const APP_VERSION = "2026.05.31-r4";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -728,6 +728,7 @@
         gpsWeak: "GPS accuracy is too low. Move to an open area and refresh.",
         gpsOutside: "You are outside the permitted site radius.",
         siteMissing: "Site GPS configuration is missing. Contact the administrator.",
+        uploadReason: "Reason",
         dashboardTitle: "Dashboard",
         date: "Date",
         apply: "Apply",
@@ -817,6 +818,7 @@
         gpsWeak: "GPS 精度不足，请到开阔位置后刷新。",
         gpsOutside: "当前位置超出工地签到半径。",
         siteMissing: "工地 GPS 配置缺失，请联系管理员。",
+        uploadReason: "原因",
         dashboardTitle: "数据看板",
         date: "日期",
         apply: "筛选",
@@ -906,6 +908,7 @@
         gpsWeak: "GPS নির্ভুলতা কম। খোলা স্থানে গিয়ে রিফ্রেশ করুন।",
         gpsOutside: "আপনি অনুমোদিত সাইট ব্যাসার্ধের বাইরে আছেন।",
         siteMissing: "সাইট GPS কনফিগারেশন পাওয়া যায়নি। অ্যাডমিনের সাথে যোগাযোগ করুন।",
+        uploadReason: "কারণ",
         dashboardTitle: "ড্যাশবোর্ড",
         date: "তারিখ",
         apply: "প্রয়োগ",
@@ -1383,7 +1386,8 @@
         const message = error.message === "geo" ? t("locationFailed") :
           error.message === "gpsWeak" || error.message.includes("GPS accuracy") ? t("gpsWeak") :
           error.message === "gpsOutside" || error.message.includes("Outside permitted") ? t("gpsOutside") :
-          error.message === "siteMissing" || error.message.includes("Site configuration") ? t("siteMissing") : t("uploadFailed");
+          error.message === "siteMissing" || error.message.includes("Site configuration") ? t("siteMissing") :
+          `${t("uploadFailed")} ${t("uploadReason")}: ${error.message || "unknown"}`;
         showToast("signToast", message, "bad");
       } finally {
         await refreshGps();
