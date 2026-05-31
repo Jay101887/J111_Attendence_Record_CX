@@ -140,7 +140,8 @@
       gap: 16px;
     }
     .sign-grid {
-      grid-template-columns: minmax(300px, 520px) minmax(300px, 1fr);
+      grid-template-columns: minmax(300px, 640px);
+      justify-content: center;
       align-items: start;
     }
     .admin-grid {
@@ -394,6 +395,42 @@
       gap: 8px;
       flex-wrap: wrap;
     }
+    .config-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .config-tab {
+      min-height: 36px;
+      color: #26364f;
+      background: #e9eef6;
+      padding: 0 8px;
+    }
+    .config-tab.active {
+      color: white;
+      background: var(--brand);
+    }
+    .config-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .config-item-main { min-width: 0; }
+    .config-item-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .icon-btn {
+      min-height: 34px;
+      min-width: 36px;
+      padding: 0 8px;
+      color: #26364f;
+      background: #e9eef6;
+    }
+    .icon-btn:hover { background: #dde5f0; }
+    .icon-btn.danger { color: white; background: #b42318; }
 
     @media (max-width: 1100px) {
       .sign-grid, .admin-grid { grid-template-columns: 1fr; }
@@ -503,22 +540,6 @@
             </div>
           </section>
 
-          <section class="panel">
-            <div class="panel-head">
-              <h2 data-i18n="todayStatus">Today Status</h2>
-              <button class="secondary" id="refreshBtn" data-i18n="refresh">Refresh</button>
-            </div>
-            <div class="panel-body">
-              <div class="kpi-grid">
-                <div class="kpi"><span data-i18n="checkedInPeople">Checked in</span><strong id="kpiCheckedIn">0</strong></div>
-                <div class="kpi"><span data-i18n="onSitePeople">On site</span><strong id="kpiOnSite">0</strong></div>
-                <div class="kpi"><span data-i18n="checkedOutPeople">Checked out</span><strong id="kpiCheckedOut">0</strong></div>
-                <div class="kpi"><span data-i18n="abnormalPeople">Abnormal</span><strong id="kpiAbnormal">0</strong></div>
-                <div class="kpi"><span data-i18n="totalHours">Total hours</span><strong id="kpiHours">0</strong></div>
-              </div>
-              <div id="signMap" class="map"></div>
-            </div>
-          </section>
         </div>
       </section>
 
@@ -531,6 +552,7 @@
             </div>
             <div class="panel-body">
               <form id="configForm">
+                <input id="configId" type="hidden" />
                 <div class="field">
                   <label for="configType" data-i18n="configType">Type</label>
                   <select id="configType">
@@ -565,6 +587,12 @@
               </form>
               <p class="helper" data-i18n="configHint">Only sites require coordinates and a check-in radius.</p>
               <div id="configToast" class="toast" role="status" aria-live="polite"></div>
+              <div class="config-tabs" id="configTabs">
+                <button type="button" class="config-tab active" data-config-filter="site" data-i18n="site">Site</button>
+                <button type="button" class="config-tab" data-config-filter="area" data-i18n="area">Work area</button>
+                <button type="button" class="config-tab" data-config-filter="supervisor" data-i18n="supervisor">Supervisor</button>
+                <button type="button" class="config-tab" data-config-filter="trade" data-i18n="trade">Trade</button>
+              </div>
               <div class="config-list" id="configList"></div>
             </div>
           </aside>
@@ -670,7 +698,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.05.31-r5";
+    const APP_VERSION = "2026.05.31-r6";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -771,6 +799,12 @@
         logout: "Logout",
         wrongPassword: "Wrong password.",
         adminLoginFailed: "Admin login failed. Check the password and confirm that the latest Apps Script version has been deployed."
+        ,edit: "Edit",
+        delete: "Delete",
+        disable: "Disable",
+        enable: "Enable",
+        configDeleted: "Configuration deleted.",
+        configUpdated: "Configuration updated."
       },
       zh: {
         appTitle: "J111 项目签到系统",
@@ -861,6 +895,12 @@
         logout: "退出",
         wrongPassword: "密码错误。",
         adminLoginFailed: "后台登录失败。请检查密码，并确认已重新部署最新版 Apps Script。"
+        ,edit: "编辑",
+        delete: "删除",
+        disable: "停用",
+        enable: "启用",
+        configDeleted: "配置已删除。",
+        configUpdated: "配置已更新。"
       },
       bn: {
         appTitle: "J111 Project হাজিরা",
@@ -951,6 +991,12 @@
         logout: "লগআউট",
         wrongPassword: "পাসওয়ার্ড ভুল।",
         adminLoginFailed: "অ্যাডমিন লগইন ব্যর্থ। পাসওয়ার্ড এবং সর্বশেষ Apps Script deployment যাচাই করুন।"
+        ,edit: "সম্পাদনা",
+        delete: "মুছুন",
+        disable: "বন্ধ",
+        enable: "চালু",
+        configDeleted: "কনফিগারেশন মুছে ফেলা হয়েছে।",
+        configUpdated: "কনফিগারেশন আপডেট হয়েছে।"
       }
     };
 
@@ -984,7 +1030,8 @@
       adminLayer: null,
       selectedMapPoint: null,
       charts: {},
-      gps: { status: "checking", position: null, distance: null, inRange: false }
+      gps: { status: "checking", position: null, distance: null, inRange: false },
+      configFilter: "site"
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1091,15 +1138,13 @@
     function setupMaps() {
       if (!window.L) return;
       const center = getSiteCenter();
-      state.signMap = L.map("signMap").setView(center, 15);
       state.adminMap = L.map("adminMap").setView(center, 15);
-      [state.signMap, state.adminMap].forEach((map) => {
+      [state.adminMap].forEach((map) => {
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 19,
           attribution: "&copy; OpenStreetMap"
         }).addTo(map);
       });
-      state.signLayer = L.layerGroup().addTo(state.signMap);
       state.adminLayer = L.layerGroup().addTo(state.adminMap);
       state.adminMap.on("click", (event) => {
         state.selectedMapPoint = event.latlng;
@@ -1212,9 +1257,7 @@
       const logs = getFilteredLogs();
       const daily = buildDaily(logs, $("filterDate")?.value || singaporeDate());
       const kpi = calculateKpi(logs, daily);
-      setKpis("", kpi);
       setKpis("admin", kpi);
-      renderMap(state.signMap, state.signLayer, logs);
       renderMap(state.adminMap, state.adminLayer, logs);
       renderCharts(logs);
       renderDailyRows(daily);
@@ -1522,42 +1565,78 @@
 
     async function saveConfig(event) {
       event.preventDefault();
-      const type = $("configType").value;
-      const item = {
-        id: makeId(type.toUpperCase()),
-        name: $("configName").value.trim(),
-        status: "active"
-      };
-      if (type === "site") {
-        item.lat = Number($("configLat").value);
-        item.lng = Number($("configLng").value);
-        item.radius = Number($("configRadius").value || 0);
+      try {
+        const type = $("configType").value;
+        const item = {
+          id: $("configId").value || makeId(type.toUpperCase()),
+          name: $("configName").value.trim(),
+          status: "active"
+        };
+        if (type === "site") {
+          item.lat = Number($("configLat").value);
+          item.lng = Number($("configLng").value);
+          item.radius = Number($("configRadius").value || 0);
+        }
+        if (type === "trade") item.sort = activeItems("trades").length + 1;
+        const plural = type === "site" ? "sites" : type === "area" ? "areas" : type === "supervisor" ? "supervisors" : "trades";
+        const existingIndex = state.config[plural].findIndex((entry) => entry.id === item.id);
+        if (existingIndex >= 0) item.status = state.config[plural][existingIndex].status || "active";
+        await apiCall(existingIndex >= 0 ? "updateConfig" : "saveConfig", { type, item });
+        await refreshAdminData();
+        $("configForm").reset();
+        $("configId").value = "";
+        renderOptions();
+        renderDashboard();
+        showToast("configToast", t(existingIndex >= 0 ? "configUpdated" : "configSaved"), "ok");
+      } catch (error) {
+        showToast("configToast", `${t("uploadFailed")} ${t("uploadReason")}: ${error.message}`, "bad");
       }
-      if (type === "trade") item.sort = activeItems("trades").length + 1;
-      const plural = type === "site" ? "sites" : type === "area" ? "areas" : type === "supervisor" ? "supervisors" : "trades";
-      state.config[plural].push(item);
-      saveDemoConfig();
-      await apiCall("saveConfig", { type, item });
-      await refreshAdminData();
-      $("configForm").reset();
-      renderOptions();
-      renderDashboard();
-      showToast("configToast", t("configSaved"), "ok");
     }
 
     function renderConfigList() {
-      const all = [
-        ...state.config.sites.map((x) => ["site", x]),
-        ...state.config.areas.map((x) => ["area", x]),
-        ...state.config.supervisors.map((x) => ["supervisor", x]),
-        ...state.config.trades.map((x) => ["trade", x])
-      ];
-      $("configList").innerHTML = all.map(([type, item]) => `
+      const plural = state.configFilter === "site" ? "sites" : state.configFilter === "area" ? "areas" : state.configFilter === "supervisor" ? "supervisors" : "trades";
+      const items = state.config[plural] || [];
+      $("configList").innerHTML = items.map((item) => `
         <div class="config-item">
-          <strong>${escapeHtml(t(type) || type)} · ${escapeHtml(item.name)}</strong>
-          <span>${type === "site" ? `${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)} · ${item.radius || 0}m` : escapeHtml(item.id)}</span>
+          <div class="config-item-main">
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${state.configFilter === "site" ? `${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)} · ${item.radius || 0}m` : escapeHtml(item.id || item.name)} · ${item.status === "inactive" ? t("disable") : t("enable")}</span>
+          </div>
+          <div class="config-item-actions">
+            <button type="button" class="icon-btn" data-config-action="edit" data-config-id="${escapeHtml(item.id)}" title="${t("edit")}">✎</button>
+            <button type="button" class="icon-btn" data-config-action="toggle" data-config-id="${escapeHtml(item.id)}" title="${item.status === "inactive" ? t("enable") : t("disable")}">${item.status === "inactive" ? "✓" : "⊘"}</button>
+            <button type="button" class="icon-btn danger" data-config-action="delete" data-config-id="${escapeHtml(item.id)}" title="${t("delete")}">×</button>
+          </div>
         </div>
       `).join("");
+      document.querySelectorAll("[data-config-action]").forEach((button) => {
+        button.addEventListener("click", () => handleConfigAction(button.dataset.configAction, button.dataset.configId));
+      });
+    }
+
+    async function handleConfigAction(action, id) {
+      const type = state.configFilter;
+      const plural = type === "site" ? "sites" : type === "area" ? "areas" : type === "supervisor" ? "supervisors" : "trades";
+      const item = state.config[plural].find((entry) => entry.id === id);
+      if (!item) return;
+      if (action === "edit") {
+        $("configType").value = type;
+        $("configId").value = item.id;
+        $("configName").value = item.name || "";
+        $("configLat").value = item.lat || "";
+        $("configLng").value = item.lng || "";
+        $("configRadius").value = item.radius || "";
+        updateConfigForm();
+        return;
+      }
+      if (action === "toggle") {
+        await apiCall("updateConfig", { type, item: { ...item, status: item.status === "inactive" ? "active" : "inactive" } });
+      }
+      if (action === "delete") {
+        await apiCall("deleteConfig", { type, id: item.id });
+      }
+      await refreshAdminData();
+      showToast("configToast", t(action === "delete" ? "configDeleted" : "configUpdated"), "ok");
     }
 
     function updateConfigForm() {
@@ -1577,7 +1656,7 @@
         if (action === "submitLog") return Promise.resolve({ ok: true, log: { ...payload, id: makeId("LOG"), serverTimestamp: payload.clientTimestamp } });
         if (action === "saveConfig") return Promise.resolve({ ok: true });
       }
-      if (action === "saveConfig") {
+      if (["saveConfig", "updateConfig", "deleteConfig"].includes(action)) {
         payload = { ...(payload || {}), adminPassword: sessionStorage.getItem("j111.adminPassword") || "" };
       }
       return jsonp(APPS_SCRIPT_URL, { action, payload: JSON.stringify(payload || {}) });
@@ -1722,7 +1801,6 @@
       $(viewId).classList.add("active");
       setTimeout(() => {
         state.adminMap?.invalidateSize();
-        state.signMap?.invalidateSize();
         Object.values(state.charts).forEach((chart) => chart.resize());
       }, 60);
     }
@@ -1767,6 +1845,18 @@
       $("filterDate").addEventListener("change", () => isAdminAuthed() ? refreshAdminData() : refreshData());
       $("configForm").addEventListener("submit", saveConfig);
       $("configType").addEventListener("change", updateConfigForm);
+      document.querySelectorAll("[data-config-filter]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.configFilter = button.dataset.configFilter;
+          document.querySelectorAll("[data-config-filter]").forEach((tab) => tab.classList.toggle("active", tab === button));
+          $("configType").value = state.configFilter;
+          $("configForm").reset();
+          $("configId").value = "";
+          $("configType").value = state.configFilter;
+          updateConfigForm();
+          renderConfigList();
+        });
+      });
       $("useMapPointBtn").addEventListener("click", () => {
         if (state.selectedMapPoint) {
           $("configLat").value = state.selectedMapPoint.lat.toFixed(6);
