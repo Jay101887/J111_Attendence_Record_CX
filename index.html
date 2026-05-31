@@ -420,7 +420,7 @@
     <header class="topbar">
       <div class="brand">
         <strong data-i18n="appTitle">J111 Project Attendance</strong>
-        <span data-i18n="appSubtitle">Singapore site check-in, dashboard and sheet sync</span>
+        <span><span data-i18n="appSubtitle">Singapore site check-in, dashboard and sheet sync</span> · <span id="versionLabel"></span></span>
       </div>
       <div class="top-actions">
         <select class="lang-select" id="languageSelect" aria-label="Language">
@@ -670,6 +670,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
+    const APP_VERSION = "2026.05.31-r3";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -726,6 +727,7 @@
         gpsMissing: "GPS unavailable. Turn on location services and allow browser permission.",
         gpsWeak: "GPS accuracy is too low. Move to an open area and refresh.",
         gpsOutside: "You are outside the permitted site radius.",
+        siteMissing: "Site GPS configuration is missing. Contact the administrator.",
         dashboardTitle: "Dashboard",
         date: "Date",
         apply: "Apply",
@@ -814,6 +816,7 @@
         gpsMissing: "无法获取 GPS，请打开定位服务并允许浏览器定位权限。",
         gpsWeak: "GPS 精度不足，请到开阔位置后刷新。",
         gpsOutside: "当前位置超出工地签到半径。",
+        siteMissing: "工地 GPS 配置缺失，请联系管理员。",
         dashboardTitle: "数据看板",
         date: "日期",
         apply: "筛选",
@@ -902,6 +905,7 @@
         gpsMissing: "GPS পাওয়া যায়নি। লোকেশন চালু করে ব্রাউজারের অনুমতি দিন।",
         gpsWeak: "GPS নির্ভুলতা কম। খোলা স্থানে গিয়ে রিফ্রেশ করুন।",
         gpsOutside: "আপনি অনুমোদিত সাইট ব্যাসার্ধের বাইরে আছেন।",
+        siteMissing: "সাইট GPS কনফিগারেশন পাওয়া যায়নি। অ্যাডমিনের সাথে যোগাযোগ করুন।",
         dashboardTitle: "ড্যাশবোর্ড",
         date: "তারিখ",
         apply: "প্রয়োগ",
@@ -1337,8 +1341,11 @@
       toggleSubmit(true);
       try {
         const position = await getPosition();
-        const site = activeItems("sites")[0] || defaultConfig.sites[0];
-        const distance = haversine(position.lat, position.lng, Number(site.lat), Number(site.lng));
+        const match = nearestSite(position);
+        if (!match) {
+          throw new Error("siteMissing");
+        }
+        const { site, distance } = match;
         if (position.accuracy > MAX_GPS_ACCURACY_METERS) throw new Error("gpsWeak");
         if (distance > Number(site.radius || 0)) throw new Error("gpsOutside");
         const payload = {
@@ -1374,8 +1381,9 @@
         showSuccess(action, saved);
       } catch (error) {
         const message = error.message === "geo" ? t("locationFailed") :
-          error.message === "gpsWeak" ? t("gpsWeak") :
-          error.message === "gpsOutside" ? t("gpsOutside") : t("uploadFailed");
+          error.message === "gpsWeak" || error.message.includes("GPS accuracy") ? t("gpsWeak") :
+          error.message === "gpsOutside" || error.message.includes("Outside permitted") ? t("gpsOutside") :
+          error.message === "siteMissing" || error.message.includes("Site configuration") ? t("siteMissing") : t("uploadFailed");
         showToast("signToast", message, "bad");
       } finally {
         await refreshGps();
@@ -1429,8 +1437,14 @@
       toggleSubmit(true);
       try {
         const position = await getPosition();
-        const site = activeItems("sites")[0] || defaultConfig.sites[0];
-        const distance = haversine(position.lat, position.lng, Number(site.lat), Number(site.lng));
+        const match = nearestSite(position);
+        if (!match) {
+          state.gps = { status: "siteMissing", position, distance: null, inRange: false };
+          renderGpsStatus();
+          toggleSubmit(false);
+          return;
+        }
+        const { site, distance } = match;
         if (position.accuracy > MAX_GPS_ACCURACY_METERS) {
           state.gps = { status: "weak", position, distance, inRange: false };
         } else if (distance > Number(site.radius || 0)) {
@@ -1452,9 +1466,22 @@
       const key = gps.status === "ready" ? "gpsReady" :
         gps.status === "weak" ? "gpsWeak" :
         gps.status === "outside" ? "gpsOutside" :
+        gps.status === "siteMissing" ? "siteMissing" :
         gps.status === "missing" ? "gpsMissing" : "gpsChecking";
       el.className = `toast show ${gps.status === "ready" ? "ok" : "bad"}`;
       el.textContent = `${t(key)}${detail}`;
+    }
+
+    function nearestSite(position) {
+      const sites = activeItems("sites").filter((site) =>
+        Number.isFinite(Number(site.lat)) &&
+        Number.isFinite(Number(site.lng)) &&
+        Number(site.radius) > 0
+      );
+      return sites.reduce((best, site) => {
+        const distance = haversine(position.lat, position.lng, Number(site.lat), Number(site.lng));
+        return !best || distance < best.distance ? { site, distance } : best;
+      }, null);
     }
 
     async function refreshData() {
@@ -1745,6 +1772,7 @@
     }
 
     function init() {
+      $("versionLabel").textContent = APP_VERSION;
       setupTime();
       bindEvents();
       updateConfigForm();
