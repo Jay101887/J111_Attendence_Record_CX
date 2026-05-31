@@ -458,6 +458,8 @@
               </div>
 
               <form id="attendanceForm">
+                <div class="toast show" id="gpsStatus" role="status" aria-live="polite"></div>
+                <button class="secondary" type="button" id="refreshGpsBtn" data-i18n="refreshGps">Refresh GPS</button>
                 <div class="form-row">
                   <div class="field">
                     <label for="workerName" data-i18n="name">Name</label>
@@ -556,20 +558,12 @@
                   <label for="configRadius" data-i18n="radius">Radius meters</label>
                   <input id="configRadius" inputmode="numeric" />
                 </div>
-                <div class="field supervisor-fields">
-                  <label for="configPhone" data-i18n="phone">Phone</label>
-                  <input id="configPhone" inputmode="tel" />
-                </div>
-                <div class="field related-fields">
-                  <label for="configRelatedArea" data-i18n="relatedArea">Related area</label>
-                  <select id="configRelatedArea"></select>
-                </div>
                 <div class="inline-actions">
                   <button type="submit" data-i18n="saveConfig">Save configuration</button>
                   <button type="button" class="secondary" id="useMapPointBtn" data-i18n="useMapPoint">Use map point</button>
                 </div>
               </form>
-              <p class="helper" data-i18n="configHint">Click the map to pick coordinates for sites or areas.</p>
+              <p class="helper" data-i18n="configHint">Only sites require coordinates and a check-in radius.</p>
               <div id="configToast" class="toast" role="status" aria-live="polite"></div>
               <div class="config-list" id="configList"></div>
             </div>
@@ -678,6 +672,7 @@
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
+    const MAX_GPS_ACCURACY_METERS = 100;
     const STORE = {
       worker: "j111.workerCache",
       lang: "j111.lang",
@@ -724,7 +719,13 @@
         relatedArea: "Related area",
         saveConfig: "Save configuration",
         useMapPoint: "Use map point",
-        configHint: "Click the map to pick coordinates for sites or areas.",
+        configHint: "Only sites require coordinates and a check-in radius.",
+        refreshGps: "Refresh GPS",
+        gpsChecking: "Checking GPS. Please turn on location services.",
+        gpsReady: "GPS ready",
+        gpsMissing: "GPS unavailable. Turn on location services and allow browser permission.",
+        gpsWeak: "GPS accuracy is too low. Move to an open area and refresh.",
+        gpsOutside: "You are outside the permitted site radius.",
         dashboardTitle: "Dashboard",
         date: "Date",
         apply: "Apply",
@@ -765,7 +766,8 @@
         login: "Login",
         cancel: "Cancel",
         logout: "Logout",
-        wrongPassword: "Wrong password."
+        wrongPassword: "Wrong password.",
+        adminLoginFailed: "Admin login failed. Check the password and confirm that the latest Apps Script version has been deployed."
       },
       zh: {
         appTitle: "J111 项目签到系统",
@@ -805,7 +807,13 @@
         relatedArea: "关联区域",
         saveConfig: "保存配置",
         useMapPoint: "使用地图点位",
-        configHint: "点击地图可为工地或区域选择经纬度。",
+        configHint: "只有工地需要设置坐标和签到半径。",
+        refreshGps: "刷新 GPS",
+        gpsChecking: "正在获取 GPS，请打开定位服务。",
+        gpsReady: "GPS 定位正常",
+        gpsMissing: "无法获取 GPS，请打开定位服务并允许浏览器定位权限。",
+        gpsWeak: "GPS 精度不足，请到开阔位置后刷新。",
+        gpsOutside: "当前位置超出工地签到半径。",
         dashboardTitle: "数据看板",
         date: "日期",
         apply: "筛选",
@@ -846,7 +854,8 @@
         login: "登录",
         cancel: "取消",
         logout: "退出",
-        wrongPassword: "密码错误。"
+        wrongPassword: "密码错误。",
+        adminLoginFailed: "后台登录失败。请检查密码，并确认已重新部署最新版 Apps Script。"
       },
       bn: {
         appTitle: "J111 Project হাজিরা",
@@ -886,7 +895,13 @@
         relatedArea: "সম্পর্কিত এলাকা",
         saveConfig: "কনফিগারেশন সংরক্ষণ",
         useMapPoint: "ম্যাপ পয়েন্ট ব্যবহার",
-        configHint: "সাইট বা এলাকার স্থান নিতে ম্যাপে ক্লিক করুন।",
+        configHint: "শুধু সাইটের জন্য স্থানাঙ্ক এবং চেক-ইন ব্যাসার্ধ প্রয়োজন।",
+        refreshGps: "GPS রিফ্রেশ",
+        gpsChecking: "GPS পরীক্ষা করা হচ্ছে। লোকেশন চালু করুন।",
+        gpsReady: "GPS প্রস্তুত",
+        gpsMissing: "GPS পাওয়া যায়নি। লোকেশন চালু করে ব্রাউজারের অনুমতি দিন।",
+        gpsWeak: "GPS নির্ভুলতা কম। খোলা স্থানে গিয়ে রিফ্রেশ করুন।",
+        gpsOutside: "আপনি অনুমোদিত সাইট ব্যাসার্ধের বাইরে আছেন।",
         dashboardTitle: "ড্যাশবোর্ড",
         date: "তারিখ",
         apply: "প্রয়োগ",
@@ -927,19 +942,20 @@
         login: "লগইন",
         cancel: "বাতিল",
         logout: "লগআউট",
-        wrongPassword: "পাসওয়ার্ড ভুল।"
+        wrongPassword: "পাসওয়ার্ড ভুল।",
+        adminLoginFailed: "অ্যাডমিন লগইন ব্যর্থ। পাসওয়ার্ড এবং সর্বশেষ Apps Script deployment যাচাই করুন।"
       }
     };
 
     const defaultConfig = {
       sites: [{ id: "SITE-J111", name: "J111 Main Site", lat: 1.3521, lng: 103.8198, radius: 300, status: "active" }],
       areas: [
-        { id: "AREA-A", name: "Zone A", siteId: "SITE-J111", lat: 1.3521, lng: 103.8198, radius: 120, status: "active" },
-        { id: "AREA-B", name: "Zone B", siteId: "SITE-J111", lat: 1.3531, lng: 103.8208, radius: 120, status: "active" }
+        { id: "AREA-A", name: "Zone A", status: "active" },
+        { id: "AREA-B", name: "Zone B", status: "active" }
       ],
       supervisors: [
-        { id: "SUP-ALI", name: "Ali", phone: "", areaId: "AREA-A", status: "active" },
-        { id: "SUP-TAN", name: "Tan", phone: "", areaId: "AREA-B", status: "active" }
+        { id: "SUP-ALI", name: "Ali", status: "active" },
+        { id: "SUP-TAN", name: "Tan", status: "active" }
       ],
       trades: [
         { id: "TRD-STEEL", name: "Steel fixer", sort: 1, status: "active" },
@@ -960,7 +976,8 @@
       signLayer: null,
       adminLayer: null,
       selectedMapPoint: null,
-      charts: {}
+      charts: {},
+      gps: { status: "checking", position: null, distance: null, inRange: false }
     };
 
     const $ = (id) => document.getElementById(id);
@@ -989,6 +1006,7 @@
       });
       renderOptions();
       renderDashboard();
+      renderGpsStatus();
     }
 
     function loadDemoConfig() {
@@ -1025,7 +1043,6 @@
       $("filterTrade").innerHTML = optionHtml(activeItems("trades"), "all", true);
       $("filterArea").innerHTML = optionHtml(activeItems("areas"), "all", true);
       $("filterSupervisor").innerHTML = optionHtml(activeItems("supervisors"), "all", true);
-      $("configRelatedArea").innerHTML = optionHtml(activeItems("areas"), "selectOne", true);
       restoreWorkerCache();
       renderConfigList();
     }
@@ -1312,12 +1329,18 @@
 
     async function submitAttendance(action) {
       if (!$("attendanceForm").reportValidity()) return;
+      if (state.gps.status !== "ready" || !state.gps.position) {
+        showToast("signToast", t("gpsMissing"), "bad");
+        return;
+      }
       showToast("signToast", t("locating"), "ok");
       toggleSubmit(true);
       try {
         const position = await getPosition();
         const site = activeItems("sites")[0] || defaultConfig.sites[0];
         const distance = haversine(position.lat, position.lng, Number(site.lat), Number(site.lng));
+        if (position.accuracy > MAX_GPS_ACCURACY_METERS) throw new Error("gpsWeak");
+        if (distance > Number(site.radius || 0)) throw new Error("gpsOutside");
         const payload = {
           projectId: PROJECT.id,
           projectName: PROJECT.name,
@@ -1350,9 +1373,12 @@
         await refreshData();
         showSuccess(action, saved);
       } catch (error) {
-        showToast("signToast", error.message === "geo" ? t("locationFailed") : t("uploadFailed"), "bad");
+        const message = error.message === "geo" ? t("locationFailed") :
+          error.message === "gpsWeak" ? t("gpsWeak") :
+          error.message === "gpsOutside" ? t("gpsOutside") : t("uploadFailed");
+        showToast("signToast", message, "bad");
       } finally {
-        toggleSubmit(false);
+        await refreshGps();
       }
     }
 
@@ -1369,8 +1395,7 @@
     function getPosition() {
       return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
-          const center = getSiteCenter();
-          resolve({ lat: center[0], lng: center[1], accuracy: 0, timestamp: new Date() });
+          reject(new Error("geo"));
           return;
         }
         navigator.geolocation.getCurrentPosition(
@@ -1393,8 +1418,43 @@
     }
 
     function toggleSubmit(disabled) {
-      $("checkInBtn").disabled = disabled;
-      $("checkOutBtn").disabled = disabled;
+      const blocked = disabled || state.gps.status !== "ready";
+      $("checkInBtn").disabled = blocked;
+      $("checkOutBtn").disabled = blocked;
+    }
+
+    async function refreshGps() {
+      state.gps = { status: "checking", position: null, distance: null, inRange: false };
+      renderGpsStatus();
+      toggleSubmit(true);
+      try {
+        const position = await getPosition();
+        const site = activeItems("sites")[0] || defaultConfig.sites[0];
+        const distance = haversine(position.lat, position.lng, Number(site.lat), Number(site.lng));
+        if (position.accuracy > MAX_GPS_ACCURACY_METERS) {
+          state.gps = { status: "weak", position, distance, inRange: false };
+        } else if (distance > Number(site.radius || 0)) {
+          state.gps = { status: "outside", position, distance, inRange: false };
+        } else {
+          state.gps = { status: "ready", position, distance, inRange: true };
+        }
+      } catch {
+        state.gps = { status: "missing", position: null, distance: null, inRange: false };
+      }
+      renderGpsStatus();
+      toggleSubmit(false);
+    }
+
+    function renderGpsStatus() {
+      const el = $("gpsStatus");
+      const gps = state.gps;
+      const detail = gps.position ? ` · ±${Math.round(gps.position.accuracy)}m · ${Math.round(gps.distance || 0)}m` : "";
+      const key = gps.status === "ready" ? "gpsReady" :
+        gps.status === "weak" ? "gpsWeak" :
+        gps.status === "outside" ? "gpsOutside" :
+        gps.status === "missing" ? "gpsMissing" : "gpsChecking";
+      el.className = `toast show ${gps.status === "ready" ? "ok" : "bad"}`;
+      el.textContent = `${t(key)}${detail}`;
     }
 
     async function refreshData() {
@@ -1431,21 +1491,17 @@
         name: $("configName").value.trim(),
         status: "active"
       };
-      if (type === "site" || type === "area") {
+      if (type === "site") {
         item.lat = Number($("configLat").value);
         item.lng = Number($("configLng").value);
         item.radius = Number($("configRadius").value || 0);
-        if (type === "area") item.siteId = activeItems("sites")[0]?.id || "SITE-J111";
-      }
-      if (type === "supervisor") {
-        item.phone = $("configPhone").value.trim();
-        item.areaId = $("configRelatedArea").value;
       }
       if (type === "trade") item.sort = activeItems("trades").length + 1;
       const plural = type === "site" ? "sites" : type === "area" ? "areas" : type === "supervisor" ? "supervisors" : "trades";
       state.config[plural].push(item);
       saveDemoConfig();
-      await apiCall("saveConfig", { type, item }).catch(() => null);
+      await apiCall("saveConfig", { type, item });
+      await refreshAdminData();
       $("configForm").reset();
       renderOptions();
       renderDashboard();
@@ -1462,16 +1518,15 @@
       $("configList").innerHTML = all.map(([type, item]) => `
         <div class="config-item">
           <strong>${escapeHtml(t(type) || type)} · ${escapeHtml(item.name)}</strong>
-          <span>${item.lat ? `${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)} · ${item.radius || 0}m` : escapeHtml(item.phone || "")}</span>
+          <span>${type === "site" ? `${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)} · ${item.radius || 0}m` : escapeHtml(item.id)}</span>
         </div>
       `).join("");
     }
 
     function updateConfigForm() {
       const type = $("configType").value;
-      document.querySelectorAll(".geo-fields").forEach((el) => el.style.display = (type === "site" || type === "area") ? "" : "none");
-      document.querySelectorAll(".supervisor-fields,.related-fields").forEach((el) => el.style.display = type === "supervisor" ? "" : "none");
-      $("useMapPointBtn").style.display = (type === "site" || type === "area") ? "" : "none";
+      document.querySelectorAll(".geo-fields").forEach((el) => el.style.display = type === "site" ? "" : "none");
+      $("useMapPointBtn").style.display = type === "site" ? "" : "none";
     }
 
     function apiCall(action, payload) {
@@ -1639,7 +1694,7 @@
         showView("adminView");
         await refreshAdminData();
       } catch {
-        showToast("adminLoginToast", t("wrongPassword"), "bad");
+        showToast("adminLoginToast", t("adminLoginFailed"), "bad");
       }
     }
 
@@ -1659,6 +1714,7 @@
       });
       $("checkInBtn").addEventListener("click", () => submitAttendance("checkIn"));
       $("checkOutBtn").addEventListener("click", () => submitAttendance("checkOut"));
+      $("refreshGpsBtn").addEventListener("click", refreshGps);
       $("clearCacheBtn").addEventListener("click", () => {
         localStorage.removeItem(STORE.worker);
         ["workerName", "phone", "finLast4"].forEach((id) => $(id).value = "");
@@ -1695,7 +1751,9 @@
       setupMaps();
       setupCharts();
       applyLanguage();
-      refreshData();
+      renderGpsStatus();
+      toggleSubmit(false);
+      refreshData().finally(refreshGps);
     }
 
     init();
