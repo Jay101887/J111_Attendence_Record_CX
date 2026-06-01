@@ -601,6 +601,7 @@
             <div class="panel">
               <div class="panel-head">
                 <h2 data-i18n="dashboardTitle">Dashboard</h2>
+                <button class="secondary" type="button" id="adminRefreshBtn" data-i18n="refresh">Refresh</button>
               </div>
               <div class="panel-body">
                 <div class="filters">
@@ -698,7 +699,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.05.31-r7";
+    const APP_VERSION = "2026.06.01-r8";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -1201,17 +1202,12 @@
       window.addEventListener("resize", () => Object.values(state.charts).forEach((chart) => chart.resize()));
     }
 
-    function renderCharts(logs) {
+    function renderCharts(logs, daily) {
       if (!window.echarts || !state.charts.tradeChart) return;
-      const byTrade = countBy(logs, (x) => nameById("trades", x.tradeId));
-      const byArea = countBy(logs, (x) => nameById("areas", x.areaId));
-      const bySupervisor = countBy(logs, (x) => nameById("supervisors", x.supervisorId));
-      const hourly = {};
-      for (let h = 0; h < 24; h++) hourly[String(h).padStart(2, "0")] = 0;
-      logs.forEach((log) => {
-        const hour = formatTime(log.serverTimestamp || log.clientTimestamp).slice(0, 2);
-        if (hourly[hour] !== undefined) hourly[hour] += 1;
-      });
+      const byTrade = countBy(daily, (x) => nameById("trades", x.tradeId));
+      const byArea = countBy(daily, (x) => nameById("areas", x.areaId));
+      const bySupervisor = countBy(daily, (x) => nameById("supervisors", x.supervisorId));
+      const hourly = buildHourlyOnSite(logs);
       barChart(state.charts.tradeChart, byTrade);
       barChart(state.charts.areaChart, byArea);
       barChart(state.charts.supervisorChart, bySupervisor, true);
@@ -1222,6 +1218,29 @@
         series: [{ type: "line", smooth: true, areaStyle: {}, data: Object.values(hourly), color: "#146c94" }],
         grid: { left: 40, right: 16, top: 24, bottom: 34 }
       });
+    }
+
+    function buildHourlyOnSite(logs) {
+      const hourly = {};
+      const grouped = {};
+      const workdayHours = [
+        ...Array.from({ length: 17 }, (_, index) => index + 7),
+        ...Array.from({ length: 7 }, (_, index) => index)
+      ].map((hour) => String(hour).padStart(2, "0"));
+      workdayHours.forEach((hour) => hourly[hour] = 0);
+      logs.forEach((log) => {
+        const hour = formatTime(log.serverTimestamp || log.clientTimestamp).slice(0, 2);
+        if (!grouped[hour]) grouped[hour] = [];
+        grouped[hour].push(log);
+      });
+      const status = {};
+      Object.keys(hourly).forEach((hour) => {
+        (grouped[hour] || [])
+          .sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp))
+          .forEach((log) => status[String(log.finLast4 || "").toUpperCase()] = log.action);
+        hourly[hour] = Object.values(status).filter((action) => action === "checkIn").length;
+      });
+      return hourly;
     }
 
     function barChart(chart, data, horizontal = false) {
@@ -1258,7 +1277,7 @@
       const kpi = calculateKpi(logs, daily);
       setKpis("admin", kpi);
       renderMap(state.adminMap, state.adminLayer, logs);
-      renderCharts(logs);
+      renderCharts(logs, daily);
       renderDailyRows(daily);
     }
 
@@ -1276,9 +1295,17 @@
     function calculateKpi(logs, daily) {
       const checkedIn = new Set(logs.filter((x) => x.action === "checkIn").map((x) => x.finLast4)).size;
       const checkedOut = new Set(logs.filter((x) => x.action === "checkOut").map((x) => x.finLast4)).size;
-      const abnormal = logs.filter((x) => x.inRange === false).length + daily.filter((x) => x.status !== "closed").length;
+      const abnormalPeople = new Set([
+        ...logs.filter((x) => x.inRange === false).map((x) => x.finLast4),
+        ...daily.filter((x) => x.status !== "closed").map((x) => x.finLast4)
+      ]);
       const hours = daily.reduce((sum, row) => sum + (Number(row.totalHours) || 0), 0);
-      return { checkedIn, checkedOut, onSite: Math.max(0, checkedIn - checkedOut), abnormal, hours };
+      const latestAction = {};
+      [...logs]
+        .sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp))
+        .forEach((log) => latestAction[String(log.finLast4 || "").toUpperCase()] = log.action);
+      const onSite = Object.values(latestAction).filter((action) => action === "checkIn").length;
+      return { checkedIn, checkedOut, onSite, abnormal: abnormalPeople.size, hours };
     }
 
     function renderDailyRows(daily) {
@@ -1354,21 +1381,36 @@
     }
 
     function classifyShift(items) {
-      const has = (start, end, action) => items.some((log) => log.action === action && inWindow(log, start, end));
-      const p1In = has("08:00", "17:00", "checkIn");
-      const p1Out = has("08:00", "17:00", "checkOut");
-      const p2In = has("17:00", "00:00", "checkIn");
-      const p2Out = has("17:00", "00:00", "checkOut");
-      const p3In = has("00:00", "07:00", "checkIn");
-      const p3Out = has("00:00", "07:00", "checkOut");
-      if (p1In && p1Out && !p2In && !p2Out && !p3In && !p3Out) return { shiftType: "normalDay", closed: true };
-      if (p1In && p1Out && p2In && p2Out && !p3In && !p3Out) return { shiftType: "returnedOt", closed: true };
-      if (p1In && p1Out && p2In && !p2Out && !p3In && p3Out) return { shiftType: "returnedOt", closed: true };
-      if (p1In && !p1Out && !p2In && p2Out && !p3In && !p3Out) return { shiftType: "continuousOt", closed: true };
-      if (p1In && !p1Out && !p2In && !p2Out && !p3In && p3Out) return { shiftType: "continuousOt", closed: true };
-      if (!p1In && !p1Out && p2In && p2Out && !p3In && !p3Out) return { shiftType: "specialEvening", closed: true };
-      if (!p1In && !p1Out && p2In && !p2Out && !p3In && p3Out) return { shiftType: "normalNight", closed: true };
-      return { shiftType: "review", closed: false };
+      const sorted = [...items].sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp));
+      if (!hasCompleteSequence(sorted)) return { shiftType: "review", closed: false };
+      const intervals = buildWorkIntervals(sorted);
+      const firstTime = formatTime(intervals[0].in).slice(0, 5);
+      const lastTime = formatTime(intervals[intervals.length - 1].out).slice(0, 5);
+      if (firstTime < "07:00") return { shiftType: "review", closed: false };
+      if (firstTime >= "17:00") {
+        if (lastTime < "07:00") return { shiftType: "normalNight", closed: true };
+        if (lastTime >= "17:00") return { shiftType: "specialEvening", closed: true };
+        return { shiftType: "review", closed: false };
+      }
+      if (intervals.length > 1) return { shiftType: "returnedOt", closed: true };
+      if (lastTime >= "17:00" || lastTime < "07:00") return { shiftType: "continuousOt", closed: true };
+      return { shiftType: "normalDay", closed: true };
+    }
+
+    function hasCompleteSequence(items) {
+      let open = false;
+      let pairs = 0;
+      for (const item of items) {
+        if (item.action === "checkIn") {
+          if (open) return false;
+          open = true;
+        } else if (item.action === "checkOut") {
+          if (!open) return false;
+          open = false;
+          pairs += 1;
+        }
+      }
+      return pairs > 0 && !open;
     }
 
     function inWindow(log, start, end) {
@@ -1838,6 +1880,7 @@
         showToast("signToast", t("cacheCleared"), "ok");
       });
       $("applyFilterBtn").addEventListener("click", () => isAdminAuthed() ? refreshAdminData() : renderDashboard());
+      $("adminRefreshBtn").addEventListener("click", refreshAdminData);
       $("filterDate").addEventListener("change", () => isAdminAuthed() ? refreshAdminData() : refreshData());
       $("configForm").addEventListener("submit", saveConfig);
       $("configType").addEventListener("change", updateConfigForm);
