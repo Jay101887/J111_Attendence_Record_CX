@@ -699,7 +699,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.06.01-r8";
+    const APP_VERSION = "2026.06.02-r9";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -1204,9 +1204,9 @@
 
     function renderCharts(logs, daily) {
       if (!window.echarts || !state.charts.tradeChart) return;
-      const byTrade = countBy(daily, (x) => nameById("trades", x.tradeId));
-      const byArea = countBy(daily, (x) => nameById("areas", x.areaId));
-      const bySupervisor = countBy(daily, (x) => nameById("supervisors", x.supervisorId));
+      const byTrade = categoryComparison(daily, (x) => nameById("trades", x.tradeId));
+      const byArea = categoryComparison(daily, (x) => nameById("areas", x.areaId));
+      const bySupervisor = categoryComparison(daily, (x) => nameById("supervisors", x.supervisorId));
       const hourly = buildHourlyOnSite(logs);
       barChart(state.charts.tradeChart, byTrade);
       barChart(state.charts.areaChart, byArea);
@@ -1243,16 +1243,27 @@
       return hourly;
     }
 
+    function categoryComparison(daily, getter) {
+      return {
+        checkedIn: countBy(daily.filter((row) => row.firstIn), getter),
+        checkedOut: countBy(daily.filter((row) => row.lastOut), getter)
+      };
+    }
+
     function barChart(chart, data, horizontal = false) {
-      const entries = Object.entries(data);
-      const names = entries.map(([name]) => name || "-");
-      const values = entries.map(([, value]) => value);
+      const names = [...new Set([...Object.keys(data.checkedIn), ...Object.keys(data.checkedOut)])];
+      const checkedInValues = names.map((name) => data.checkedIn[name] || 0);
+      const checkedOutValues = names.map((name) => data.checkedOut[name] || 0);
       chart.setOption({
-        tooltip: {},
-        grid: { left: horizontal ? 90 : 42, right: 16, top: 24, bottom: 46 },
+        tooltip: { trigger: "axis" },
+        legend: { data: [t("checkedInPeople"), t("checkedOutPeople")], top: 8 },
+        grid: { left: horizontal ? 90 : 42, right: 16, top: 52, bottom: 46 },
         xAxis: horizontal ? { type: "value" } : { type: "category", data: names, axisLabel: { interval: 0, rotate: names.length > 4 ? 25 : 0 } },
         yAxis: horizontal ? { type: "category", data: names } : { type: "value" },
-        series: [{ type: "bar", data: values, color: "#146c94", barMaxWidth: 34 }]
+        series: [
+          { name: t("checkedInPeople"), type: "bar", data: checkedInValues, itemStyle: { color: "#1f8f55" }, barMaxWidth: 26 },
+          { name: t("checkedOutPeople"), type: "bar", data: checkedOutValues, itemStyle: { color: "#b56b00" }, barMaxWidth: 26 }
+        ]
       });
     }
 
