@@ -699,7 +699,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.06.02-r9";
+    const APP_VERSION = "2026.06.02-r11";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -1024,13 +1024,15 @@
       config: loadDemoConfig(),
       logs: loadDemoLogs(),
       daily: [],
+      cloudDaily: [],
       mapsReady: false,
       adminMap: null,
       adminLayer: null,
       selectedMapPoint: null,
       charts: {},
       gps: { status: "checking", position: null, distance: null, inRange: false },
-      configFilter: "site"
+      configFilter: "site",
+      submitting: false
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1213,34 +1215,32 @@
       barChart(state.charts.supervisorChart, bySupervisor, true);
       state.charts.timeChart.setOption({
         tooltip: {},
-        xAxis: { type: "category", data: Object.keys(hourly) },
+        xAxis: { type: "category", data: hourly.labels },
         yAxis: { type: "value" },
-        series: [{ type: "line", smooth: true, areaStyle: {}, data: Object.values(hourly), color: "#146c94" }],
+        series: [{ type: "line", smooth: true, areaStyle: {}, data: hourly.values, color: "#146c94" }],
         grid: { left: 40, right: 16, top: 24, bottom: 34 }
       });
     }
 
     function buildHourlyOnSite(logs) {
-      const hourly = {};
       const grouped = {};
       const workdayHours = [
         ...Array.from({ length: 17 }, (_, index) => index + 7),
         ...Array.from({ length: 7 }, (_, index) => index)
       ].map((hour) => String(hour).padStart(2, "0"));
-      workdayHours.forEach((hour) => hourly[hour] = 0);
       logs.forEach((log) => {
         const hour = formatTime(log.serverTimestamp || log.clientTimestamp).slice(0, 2);
         if (!grouped[hour]) grouped[hour] = [];
         grouped[hour].push(log);
       });
       const status = {};
-      Object.keys(hourly).forEach((hour) => {
+      const values = workdayHours.map((hour) => {
         (grouped[hour] || [])
           .sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp))
           .forEach((log) => status[String(log.finLast4 || "").toUpperCase()] = log.action);
-        hourly[hour] = Object.values(status).filter((action) => action === "checkIn").length;
+        return Object.values(status).filter((action) => action === "checkIn").length;
       });
-      return hourly;
+      return { labels: workdayHours, values };
     }
 
     function categoryComparison(daily, getter) {
@@ -1277,7 +1277,7 @@
         return workDate === date &&
           (!area || log.areaId === area) &&
           (!trade || log.tradeId === trade) &&
-          (!supervisor || log.supervisorId === supervisor);
+          (!supervisor || normalizeSupervisorName(log.supervisorId) === normalizeSupervisorName(supervisor));
       });
     }
 
@@ -1285,11 +1285,25 @@
       state.daily = buildDaily(state.logs, $("filterDate")?.value || singaporeDate());
       const logs = getFilteredLogs();
       const daily = buildDaily(logs, $("filterDate")?.value || singaporeDate());
+      const chartDaily = getFilteredCloudDaily();
       const kpi = calculateKpi(logs, daily);
       setKpis("admin", kpi);
       renderMap(state.adminMap, state.adminLayer, logs);
-      renderCharts(logs, daily);
+      renderCharts(logs, chartDaily.length ? chartDaily : daily);
       renderDailyRows(daily);
+    }
+
+    function getFilteredCloudDaily() {
+      const date = $("filterDate").value || singaporeDate();
+      const area = $("filterArea").value;
+      const trade = $("filterTrade").value;
+      const supervisor = $("filterSupervisor").value;
+      return state.cloudDaily.filter((row) =>
+        row.workDate === date &&
+        (!area || row.areaId === area) &&
+        (!trade || row.tradeId === trade) &&
+        (!supervisor || normalizeSupervisorName(row.supervisorId) === normalizeSupervisorName(supervisor))
+      );
     }
 
     function setKpis(prefix, kpi) {
@@ -1367,7 +1381,7 @@
         phone: first.phone,
         tradeId: latestValue(items, "tradeId"),
         areaId: latestValue(items, "areaId"),
-        supervisorId: latestValue(items, "supervisorId"),
+        supervisorId: normalizeSupervisorName(latestValue(items, "supervisorId")),
         firstIn,
         lastOut,
         totalHours: hours,
@@ -1431,12 +1445,14 @@
     }
 
     async function submitAttendance(action) {
+      if (state.submitting) return;
       if (!$("attendanceForm").reportValidity()) return;
       if (state.gps.status !== "ready" || !state.gps.position) {
         showToast("signToast", t("gpsMissing"), "bad");
         return;
       }
       showToast("signToast", t("locating"), "ok");
+      state.submitting = true;
       toggleSubmit(true);
       try {
         const position = await getPosition();
@@ -1489,6 +1505,7 @@
           `${t("uploadFailed")} ${t("uploadReason")}: ${error.message || "unknown"}`;
         showToast("signToast", message, "bad");
       } finally {
+        state.submitting = false;
         await refreshGps();
       }
     }
@@ -1602,6 +1619,7 @@
       });
       if (result?.config) state.config = normalizeConfig(result.config);
       if (result?.logs) state.logs = result.logs;
+      if (result?.daily) state.cloudDaily = result.daily;
       renderOptions();
       renderDashboard();
     }
@@ -1760,13 +1778,14 @@
       return {
         sites: config.sites || [],
         areas: config.areas || [],
-        supervisors: config.supervisors || [],
+        supervisors: (config.supervisors || []).map((item) => ({ ...item, name: normalizeSupervisorName(item.name) })),
         trades: config.trades || []
       };
     }
 
     function nameById(type, id) {
-      return (state.config[type] || []).find((item) => item.id === id || item.name === id)?.name || id || "-";
+      const value = type === "supervisors" ? normalizeSupervisorName(id) : id;
+      return (state.config[type] || []).find((item) => item.id === value || item.name === value)?.name || value || "-";
     }
 
     function selectedText(id) {
@@ -1779,6 +1798,14 @@
         if (items[i][key]) return items[i][key];
       }
       return "";
+    }
+
+    function normalizeSupervisorName(value) {
+      return String(value || "")
+        .trim()
+        .replace(/\s*\(\s*/g, "(")
+        .replace(/\s*\)\s*/g, ")")
+        .replace(/\s+/g, " ");
     }
 
     function shiftLabel(type) {
