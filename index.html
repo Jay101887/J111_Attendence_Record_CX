@@ -699,7 +699,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.06.02-r12";
+    const APP_VERSION = "2026.06.04-r14";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -1522,7 +1522,7 @@
           siteId: site.name,
           distanceMeters: Math.round(distance),
           inRange: distance <= (Number(site.radius) || 0),
-          workDate: workDateFor(position.timestamp || new Date(), action)
+          workDate: workDateFor(position.timestamp || new Date(), action, $("finLast4").value.trim().toUpperCase())
         };
         const result = await apiCall("submitLog", payload);
         const saved = result.log || { ...payload, id: makeId("LOG"), serverTimestamp: payload.clientTimestamp };
@@ -1544,14 +1544,26 @@
       }
     }
 
-    function workDateFor(dateValue, action) {
+    function workDateFor(dateValue, action, finLast4) {
       const date = new Date(dateValue);
       const time = singaporeTime(date).slice(0, 5);
-      if (action === "checkOut" && time >= "00:00" && time < "07:00") {
-        const shifted = new Date(date.getTime() - 12 * 36e5);
-        return singaporeDate(shifted);
+      if (action === "checkOut" && time >= "00:00" && time < "08:00") {
+        const previousDate = singaporeDate(new Date(date.getTime() - 12 * 36e5));
+        if (hasOpenAttendance(previousDate, finLast4)) return previousDate;
       }
       return singaporeDate(date);
+    }
+
+    function hasOpenAttendance(workDate, finLast4) {
+      const logs = state.logs
+        .filter((log) => log.workDate === workDate && String(log.finLast4 || "").toUpperCase() === String(finLast4 || "").toUpperCase())
+        .sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp));
+      let open = false;
+      logs.forEach((log) => {
+        if (log.action === "checkIn" && !open) open = true;
+        else if (log.action === "checkOut" && open) open = false;
+      });
+      return open;
     }
 
     function getPosition() {
