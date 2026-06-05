@@ -699,10 +699,11 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.06.04-r14";
+    const APP_VERSION = "2026.06.06-r16";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
+    const MAX_AUTO_CLOSE_HOURS = 16;
     const STORE = {
       worker: "j111.workerCache",
       lang: "j111.lang.r7",
@@ -791,6 +792,7 @@
         continuousOt: "Continuous Overtime",
         specialEvening: "Special Evening Shift",
         normalNight: "Normal Night Shift",
+        longReview: "Long shift review",
         review: "Review",
         closed: "Closed",
         open: "Open",
@@ -890,6 +892,7 @@
         continuousOt: "正常加班",
         specialEvening: "特殊晚班",
         normalNight: "正常夜班",
+        longReview: "超长工时需审核",
         review: "需审核",
         closed: "已闭环",
         open: "未闭环",
@@ -989,6 +992,7 @@
         continuousOt: "ধারাবাহিক ওভারটাইম",
         specialEvening: "বিশেষ সন্ধ্যার শিফট",
         normalNight: "সাধারণ রাতের শিফট",
+        longReview: "দীর্ঘ শিফট রিভিউ",
         review: "রিভিউ",
         closed: "সম্পূর্ণ",
         open: "অসম্পূর্ণ",
@@ -1376,12 +1380,11 @@
     function summarizePersonDay(items) {
       items.sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp));
       const first = items[0] || {};
-      const ins = items.filter((x) => x.action === "checkIn");
-      const outs = items.filter((x) => x.action === "checkOut");
-      const firstIn = ins[0]?.serverTimestamp || ins[0]?.clientTimestamp || null;
-      const lastOut = outs[outs.length - 1]?.serverTimestamp || outs[outs.length - 1]?.clientTimestamp || null;
-      const flags = classifyShift(items);
-      const intervals = buildWorkIntervals(items);
+      const state = buildWorkState(items);
+      const firstIn = state.firstInItem ? state.firstInItem.serverTimestamp || state.firstInItem.clientTimestamp : null;
+      const lastOut = state.lastOutItem ? state.lastOutItem.serverTimestamp || state.lastOutItem.clientTimestamp : null;
+      const flags = classifyShift(items, state);
+      const intervals = state.intervals;
       const hours = intervals.reduce((sum, pair) => sum + Math.max(0, (new Date(pair.out) - new Date(pair.in)) / 36e5), 0);
       const parts = splitHours(intervals, flags.shiftType);
       return {
@@ -1404,25 +1407,35 @@
     }
 
     function buildWorkIntervals(items) {
+      return buildWorkState(items).intervals;
+    }
+
+    function buildWorkState(items) {
       const sorted = [...items].sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp));
       const intervals = [];
       let openIn = null;
+      let firstInItem = null;
+      let lastOutItem = null;
       sorted.forEach((item) => {
-        const stamp = item.serverTimestamp || item.clientTimestamp;
-        if (item.action === "checkIn" && !openIn) openIn = stamp;
-        if (item.action === "checkOut" && openIn) {
-          intervals.push({ in: openIn, out: stamp });
+        if (item.action === "checkIn") {
+          if (!openIn) {
+            openIn = item;
+            if (!firstInItem) firstInItem = item;
+          }
+        } else if (item.action === "checkOut" && openIn) {
+          intervals.push({ in: openIn.serverTimestamp || openIn.clientTimestamp, out: item.serverTimestamp || item.clientTimestamp });
+          lastOutItem = item;
           openIn = null;
         }
       });
-      return intervals;
+      return { intervals, firstInItem, lastOutItem, openInItem: openIn };
     }
 
     function splitHours(intervals, shiftType) {
       const total = intervals.reduce((sum, pair) => sum + Math.max(0, new Date(pair.out) - new Date(pair.in)) / 36e5, 0);
       if (shiftType === "normalNight") return { normal: 0, overtime: 0, night: round2(total) };
       if (shiftType === "specialEvening") return { normal: 0, overtime: round2(total), night: 0 };
-      if (shiftType === "review") return { normal: 0, overtime: 0, night: 0 };
+      if (shiftType === "review" || shiftType === "longReview") return { normal: 0, overtime: 0, night: 0 };
 
       let normal = 0;
       let overtime = 0;
@@ -1439,15 +1452,17 @@
       return { normal: round2(normal), overtime: round2(overtime), night: 0 };
     }
 
-    function classifyShift(items) {
-      const sorted = [...items].sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp));
-      if (!hasCompleteSequence(sorted)) return { shiftType: "review", closed: false };
-      const intervals = buildWorkIntervals(sorted);
+    function classifyShift(items, state) {
+      state = state || buildWorkState(items);
+      if (!hasCompleteSequence(items, state)) return { shiftType: "review", closed: false };
+      const intervals = state.intervals;
+      const hasLongInterval = intervals.some((pair) => (new Date(pair.out) - new Date(pair.in)) / 36e5 > MAX_AUTO_CLOSE_HOURS);
+      if (hasLongInterval) return { shiftType: "longReview", closed: false };
       const firstTime = formatTime(intervals[0].in).slice(0, 5);
       const lastTime = formatTime(intervals[intervals.length - 1].out).slice(0, 5);
       if (firstTime < "07:00") return { shiftType: "review", closed: false };
       if (firstTime >= "17:00") {
-        if (lastTime < "07:00") return { shiftType: "normalNight", closed: true };
+        if (lastTime < "08:00") return { shiftType: "normalNight", closed: true };
         if (lastTime >= "17:00") return { shiftType: "specialEvening", closed: true };
         return { shiftType: "review", closed: false };
       }
@@ -1456,20 +1471,9 @@
       return { shiftType: "normalDay", closed: true };
     }
 
-    function hasCompleteSequence(items) {
-      let open = false;
-      let pairs = 0;
-      for (const item of items) {
-        if (item.action === "checkIn") {
-          if (open) continue;
-          open = true;
-        } else if (item.action === "checkOut") {
-          if (!open) continue;
-          open = false;
-          pairs += 1;
-        }
-      }
-      return pairs > 0 && !open;
+    function hasCompleteSequence(items, state) {
+      state = state || buildWorkState(items);
+      return state.intervals.length > 0 && !state.openInItem;
     }
 
     function inWindow(log, start, end) {
@@ -1865,6 +1869,7 @@
         continuousOt: "continuousOt",
         specialEvening: "specialEvening",
         normalNight: "normalNight",
+        longReview: "longReview",
         review: "review"
       };
       return t(map[type] || "review");
