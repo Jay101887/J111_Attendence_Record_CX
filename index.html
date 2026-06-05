@@ -1521,6 +1521,7 @@
       const orphan = [];
       Object.values(groups).forEach((items) => {
         const stateForGroup = buildWorkState(items);
+        if (stateForGroup.intervals.length > 0 && !stateForGroup.openInItem) return;
         const usedCheckoutKeys = new Set(stateForGroup.intervals.map((pair) => logKey(pair.outItem)));
         items
           .filter((item) => item.action === "checkOut" && !usedCheckoutKeys.has(logKey(item)))
