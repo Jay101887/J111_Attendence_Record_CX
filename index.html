@@ -1981,11 +1981,17 @@
     function shiftLabel(type) {
       const map = {
         normalDay: "normalDay",
+        "正常白班": "normalDay",
         returnedOt: "returnedOt",
+        "回来加班": "returnedOt",
         continuousOt: "continuousOt",
+        "正常加班": "continuousOt",
         specialEvening: "specialEvening",
+        "特殊晚班": "specialEvening",
         normalNight: "normalNight",
+        "正常夜班": "normalNight",
         longReview: "longReview",
+        "超长工时需审核": "longReview",
         review: "review"
       };
       return t(map[type] || "review");
