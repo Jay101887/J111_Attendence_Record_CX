@@ -256,6 +256,11 @@
       background: #fff1f0;
       color: #7a271a;
     }
+    .toast.warn {
+      border-color: #f3d18b;
+      background: #fff8e6;
+      color: #7a4a00;
+    }
 
     .modal-backdrop {
       position: fixed;
@@ -288,7 +293,7 @@
 
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
       gap: 12px;
       margin-bottom: 16px;
     }
@@ -369,6 +374,11 @@
     .badge.ok { background: #dcf5e7; color: #166534; }
     .badge.warn { background: #fff2cc; color: #8a4b00; }
     .badge.bad { background: #ffe3e0; color: #912018; }
+    .orphan-panel {
+      margin-top: 16px;
+      border-color: #f3d18b;
+      background: #fffdf7;
+    }
 
     .filters {
       display: grid;
@@ -629,7 +639,33 @@
                   <div class="kpi"><span data-i18n="onSitePeople">On site</span><strong id="adminOnSite">0</strong></div>
                   <div class="kpi"><span data-i18n="checkedOutPeople">Checked out</span><strong id="adminCheckedOut">0</strong></div>
                   <div class="kpi"><span data-i18n="abnormalPeople">Abnormal</span><strong id="adminAbnormal">0</strong></div>
+                  <div class="kpi"><span data-i18n="orphanCheckoutPeople">Orphan check-outs</span><strong id="adminOrphanCheckouts">0</strong></div>
                   <div class="kpi"><span data-i18n="totalHours">Total hours</span><strong id="adminHours">0</strong></div>
+                </div>
+
+                <div class="panel orphan-panel" id="orphanPanel">
+                  <div class="panel-head">
+                    <h3 data-i18n="orphanCheckoutTitle">Orphan check-outs</h3>
+                    <span class="badge warn" id="orphanCountBadge">0</span>
+                  </div>
+                  <div class="panel-body">
+                    <div class="helper" data-i18n="orphanCheckoutHint">These check-out records have no matching check-in and do not count work hours.</div>
+                    <div class="table-wrap" style="margin-top:10px">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th data-i18n="time">Time</th>
+                            <th data-i18n="name">Name</th>
+                            <th data-i18n="finShort">FIN</th>
+                            <th data-i18n="area">Work area</th>
+                            <th data-i18n="supervisor">Supervisor</th>
+                            <th data-i18n="recordId">Record ID</th>
+                          </tr>
+                        </thead>
+                        <tbody id="orphanRows"></tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
 
                 <div id="adminMap" class="map"></div>
@@ -699,7 +735,7 @@
 
   <script>
     const PROJECT = { id: "J111", name: "J111 Project", timezone: "Asia/Singapore" };
-    const APP_VERSION = "2026.06.06-r16";
+    const APP_VERSION = "2026.06.06-r17";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwL9b4gIPnw6EhTSfeNY4fZQ9B_-EkXzbqmi0fxSFyy9tsQZ7mCLk7tiHkRfHPaS53FrA/exec";
     const DEMO_ADMIN_PASSWORD = "demo";
     const MAX_GPS_ACCURACY_METERS = 100;
@@ -740,6 +776,10 @@
         checkedOutPeople: "Checked out",
         abnormalPeople: "Abnormal",
         totalHours: "Total hours",
+        orphanCheckoutPeople: "Orphan check-outs",
+        orphanCheckoutTitle: "Orphan check-outs",
+        orphanCheckoutHint: "These check-out records have no matching check-in and do not count work hours.",
+        orphanCheckoutUploaded: "Check-out uploaded, but no matching check-in was found. This record will not close attendance and will not count work hours. Please confirm your check-in or contact the administrator.",
         configTitle: "Configuration",
         configType: "Type",
         site: "Site",
@@ -761,6 +801,7 @@
         uploadReason: "Reason",
         dashboardTitle: "Dashboard",
         date: "Date",
+        time: "Time",
         apply: "Apply",
         tradeChart: "By trade",
         areaChart: "By area",
@@ -840,6 +881,10 @@
         checkedOutPeople: "已签退",
         abnormalPeople: "异常",
         totalHours: "总工时",
+        orphanCheckoutPeople: "孤立签退",
+        orphanCheckoutTitle: "孤立签退",
+        orphanCheckoutHint: "以下签退记录未找到对应签到，不形成考勤闭环，也不计入工时。",
+        orphanCheckoutUploaded: "签退记录已上传，但未找到对应签到记录。本次签退无法形成考勤闭环，不计入工时。请确认是否已签到，或联系管理员处理。",
         configTitle: "配置中心",
         configType: "类型",
         site: "工地",
@@ -861,6 +906,7 @@
         uploadReason: "原因",
         dashboardTitle: "数据看板",
         date: "日期",
+        time: "时间",
         apply: "筛选",
         tradeChart: "按工种",
         areaChart: "按区域",
@@ -940,6 +986,10 @@
         checkedOutPeople: "চেক আউট",
         abnormalPeople: "অস্বাভাবিক",
         totalHours: "মোট ঘণ্টা",
+        orphanCheckoutPeople: "মিলহীন চেক-আউট",
+        orphanCheckoutTitle: "মিলহীন চেক-আউট",
+        orphanCheckoutHint: "এই চেক-আউটগুলোর মিল থাকা চেক-ইন নেই, তাই কাজের ঘণ্টা হিসেবে ধরা হবে না।",
+        orphanCheckoutUploaded: "Check-out uploaded, but no matching check-in was found. This record will not close attendance and will not count work hours. Please contact the administrator.",
         configTitle: "কনফিগারেশন",
         configType: "ধরন",
         site: "সাইট",
@@ -961,6 +1011,7 @@
         uploadReason: "কারণ",
         dashboardTitle: "ড্যাশবোর্ড",
         date: "তারিখ",
+        time: "সময়",
         apply: "প্রয়োগ",
         tradeChart: "কাজের ধরন অনুযায়ী",
         areaChart: "এলাকা অনুযায়ী",
@@ -1045,7 +1096,8 @@
       charts: {},
       gps: { status: "checking", position: null, distance: null, inRange: false },
       configFilter: "site",
-      submitting: false
+      submitting: false,
+      adminDataLoaded: false
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1299,11 +1351,13 @@
       const logs = getFilteredLogs();
       const daily = buildDaily(logs, $("filterDate")?.value || singaporeDate());
       const chartDaily = getFilteredCloudDaily();
+      const tableDaily = state.adminDataLoaded ? chartDaily : daily;
       const kpi = calculateKpi(logs, daily);
       setKpis("admin", kpi);
       renderMap(state.adminMap, state.adminLayer, logs);
       renderCharts(logs, chartDaily.length ? chartDaily : daily);
-      renderDailyRows(daily);
+      renderOrphanRows(kpi.orphanCheckouts);
+      renderDailyRows(tableDaily);
     }
 
     function getFilteredCloudDaily() {
@@ -1321,12 +1375,13 @@
 
     function setKpis(prefix, kpi) {
       const map = {
-        checkedIn: "adminCheckedIn", onSite: "adminOnSite", checkedOut: "adminCheckedOut", abnormal: "adminAbnormal", hours: "adminHours"
+        checkedIn: "adminCheckedIn", onSite: "adminOnSite", checkedOut: "adminCheckedOut", abnormal: "adminAbnormal", orphan: "adminOrphanCheckouts", hours: "adminHours"
       };
       $(map.checkedIn).textContent = kpi.checkedIn;
       $(map.onSite).textContent = kpi.onSite;
       $(map.checkedOut).textContent = kpi.checkedOut;
       $(map.abnormal).textContent = kpi.abnormal;
+      $(map.orphan).textContent = kpi.orphanCheckouts.length;
       $(map.hours).textContent = kpi.hours.toFixed(1);
     }
 
@@ -1338,12 +1393,13 @@
         ...daily.filter((x) => x.status !== "closed").map((x) => x.finLast4)
       ]);
       const hours = daily.reduce((sum, row) => sum + (Number(row.totalHours) || 0), 0);
+      const orphanCheckouts = findOrphanCheckouts(logs);
       const latestAction = {};
       [...logs]
         .sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp))
         .forEach((log) => latestAction[String(log.finLast4 || "").toUpperCase()] = log.action);
       const onSite = Object.values(latestAction).filter((action) => action === "checkIn").length;
-      return { checkedIn, checkedOut, onSite, abnormal: abnormalPeople.size, hours };
+      return { checkedIn, checkedOut, onSite, abnormal: abnormalPeople.size, orphanCheckouts, hours };
     }
 
     function renderDailyRows(daily) {
@@ -1363,6 +1419,22 @@
         </tr>
       `).join("");
       $("dailyRows").innerHTML = rows || `<tr><td colspan="11">${t("noData")}</td></tr>`;
+    }
+
+    function renderOrphanRows(orphanCheckouts) {
+      $("orphanCountBadge").textContent = orphanCheckouts.length;
+      $("orphanPanel").style.display = orphanCheckouts.length ? "block" : "none";
+      const rows = orphanCheckouts.map((log) => `
+        <tr>
+          <td>${escapeHtml(formatTime(log.serverTimestamp || log.clientTimestamp))}</td>
+          <td>${escapeHtml(log.name || "-")}</td>
+          <td>${escapeHtml(log.finLast4 || "-")}</td>
+          <td>${escapeHtml(nameById("areas", log.areaId))}</td>
+          <td>${escapeHtml(nameById("supervisors", log.supervisorId))}</td>
+          <td>${escapeHtml(log.id || "-")}</td>
+        </tr>
+      `).join("");
+      $("orphanRows").innerHTML = rows || `<tr><td colspan="6">${t("noData")}</td></tr>`;
     }
 
     function buildDaily(logs, date) {
@@ -1423,12 +1495,53 @@
             if (!firstInItem) firstInItem = item;
           }
         } else if (item.action === "checkOut" && openIn) {
-          intervals.push({ in: openIn.serverTimestamp || openIn.clientTimestamp, out: item.serverTimestamp || item.clientTimestamp });
+          intervals.push({
+            in: openIn.serverTimestamp || openIn.clientTimestamp,
+            out: item.serverTimestamp || item.clientTimestamp,
+            inItem: openIn,
+            outItem: item
+          });
           lastOutItem = item;
           openIn = null;
         }
       });
       return { intervals, firstInItem, lastOutItem, openInItem: openIn };
+    }
+
+    function findOrphanCheckouts(logs) {
+      const groups = {};
+      logs.forEach((log) => {
+        const workDate = log.workDate || singaporeDate(new Date(log.serverTimestamp || log.clientTimestamp));
+        const fin = String(log.finLast4 || "").toUpperCase();
+        if (!workDate || !fin) return;
+        const key = `${workDate}|${fin}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(log);
+      });
+      const orphan = [];
+      Object.values(groups).forEach((items) => {
+        const stateForGroup = buildWorkState(items);
+        const usedCheckoutKeys = new Set(stateForGroup.intervals.map((pair) => logKey(pair.outItem)));
+        items
+          .filter((item) => item.action === "checkOut" && !usedCheckoutKeys.has(logKey(item)))
+          .forEach((item) => orphan.push(item));
+      });
+      return orphan.sort((a, b) => new Date(a.serverTimestamp || a.clientTimestamp) - new Date(b.serverTimestamp || b.clientTimestamp));
+    }
+
+    function isOrphanCheckout(log, logs) {
+      if (!log || log.action !== "checkOut") return false;
+      return findOrphanCheckouts(logs).some((item) => logKey(item) === logKey(log));
+    }
+
+    function logKey(log) {
+      if (!log) return "";
+      return log.id || [
+        log.workDate || "",
+        String(log.finLast4 || "").toUpperCase(),
+        log.action || "",
+        log.serverTimestamp || log.clientTimestamp || ""
+      ].join("|");
     }
 
     function splitHours(intervals, shiftType) {
@@ -1534,7 +1647,7 @@
         saveWorkerCache();
         $("workContent").value = "";
         await refreshData();
-        showSuccess(action, saved, result.duplicate);
+        showSuccess(action, saved, result.duplicate, Boolean(result.orphanCheckout) || isOrphanCheckout(saved, state.logs));
       } catch (error) {
         const message = error.message === "geo" ? t("locationFailed") :
           error.message === "gpsWeak" || error.message.includes("GPS accuracy") ? t("gpsWeak") :
@@ -1584,19 +1697,20 @@
       });
     }
 
-    function showSuccess(action, log, duplicate) {
+    function showSuccess(action, log, duplicate, orphanCheckout = false) {
       const title = action === "checkOut" ? t("successOut") : t("successIn");
       const recordedAt = log.serverTimestamp || log.clientTimestamp || "";
       showToast("signToast", `
         <strong>${title}</strong><br>
         ${duplicate ? `<strong>${t("duplicateSaved")}</strong><br>` : ""}
+        ${orphanCheckout ? `<strong>${t("orphanCheckoutUploaded")}</strong><br>` : ""}
         ${t("name")}: ${escapeHtml(log.name)}<br>
         ${t("finShort")}: ${escapeHtml(log.finLast4)}<br>
         ${t("attendanceTime")}: ${escapeHtml(formatRecordedAt(recordedAt))}<br>
         ${t("area")}: ${escapeHtml(nameById("areas", log.areaId))}<br>
         ${t("supervisor")}: ${escapeHtml(nameById("supervisors", log.supervisorId))}<br>
         ${t("recordId")}: ${escapeHtml(log.id || "-")}
-      `, "ok", true);
+      `, orphanCheckout ? "warn" : "ok", true);
     }
 
     function toggleSubmit(disabled) {
@@ -1674,6 +1788,7 @@
       if (result?.config) state.config = normalizeConfig(result.config);
       if (result?.logs) state.logs = result.logs;
       if (result?.daily) state.cloudDaily = result.daily;
+      state.adminDataLoaded = true;
       renderOptions();
       renderDashboard();
     }
@@ -2010,6 +2125,7 @@
       $("adminCancelBtn").addEventListener("click", closeAdminLogin);
       $("adminLogoutBtn").addEventListener("click", () => {
         sessionStorage.removeItem("j111.adminPassword");
+        state.adminDataLoaded = false;
         showView("signView");
       });
       $("adminPassword").addEventListener("keydown", (event) => {
